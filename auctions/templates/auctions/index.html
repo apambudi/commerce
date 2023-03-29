@@ -1,0 +1,18 @@
+{% extends "auctions/layout.html" %}
+
+{% block body %}
+    <h2>Active Listings</h2>
+    {% for auction in auctions %}
+    <h5><a href="{% url 'auction' auction.id %}">{{ auction.title }}</a></h5>
+        <a> <strong>Price:</strong> ${{ auction.price }} dollars </a><br>
+        <a>{{ auction.description }}</a>
+        {% if user.is_authenticated %}
+            <form action="{% url 'index' %}" method="post">
+                {% csrf_token %}
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <input type="hidden" name="auction_id" value="{{ auction.id }}">
+                <input type="submit" value="Add to Watchlist"><br>
+            </form>
+        {% endif %}
+    {% endfor %}
+{% endblock %}

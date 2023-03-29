@@ -1,0 +1,15 @@
+{% extends "auctions/layout.html" %}
+
+{% block body %}
+    {% for item in list %}
+        <h5>{{ item.auction.title }}</h5> 
+        <a> {{ item.auction.description }}, {{ item.auction.price }} dollars, listed by {{ item.auction.user }}.</a>
+        <form action="{% url 'watchlist' user.id  %}", method="post">
+            {% csrf_token %}
+            <input type="hidden", name="item_id", value="{{ item.id }}">
+            <input type="submit", value="Remove">
+        </form>
+    {% empty %}
+        <a> No Watchlist. </a>
+    {% endfor %}
+{% endblock %}

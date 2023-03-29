@@ -1,0 +1,19 @@
+{% extends "auctions/layout.html" %}
+
+{% block body %}
+
+{% if message %}
+<h3>{{ message }}</h3>
+{% endif %}
+
+<h5>{{ auction.title }}</h5><br>
+<a> <strong>Price:</strong> ${{ auction.price }} dollars </a><br>
+<a> Listed by {{ auction.user }}</a>
+<form action="{% url 'auction' auction.id %}", method="post">
+    {% csrf_token %}
+    <input type="number", name="bid", autofocus>
+    <input type="hidden", name="user_id", value="{{ user.id }}">
+    <input type="submit", value="Place bid">
+</form>
+
+{% endblock %}
