@@ -1,0 +1,11 @@
+{% extends "auctions/layout.html" %}
+
+{% block body %}
+{% if message %}
+<a>{{ message }}</a>
+{% endif %}
+
+{% if winner %}
+<a>You {{ winner }} are the winner of this auction.</a>
+{% endif %}
+{% endblock %}

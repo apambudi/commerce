@@ -8,30 +8,20 @@ from .models import *
 from django import forms
 
 # Create a form for new auction listing
-class NewListingForm(forms.Form):
+class ListingForm(forms.Form):
     title = forms.CharField(max_length=64)
     description = forms.CharField(max_length=250)
     price = forms.IntegerField()
     url = forms.URLField()
+    category = forms.ModelChoiceField(queryset=CategoryItem.objects.all(), empty_label=None)
+
+class BidForm(forms.Form):
+    bid = forms.IntegerField()
+
+class CommentForm(forms.Form):
+    comment = forms.CharField(widget=forms.Textarea())     
 
 def index(request):
-
-    if request.method == 'POST':
-
-        # Finding the user id from the submitted form
-        user_id = int(request.POST["user_id"])
-        user = User.objects.get(pk=user_id)
-
-        # Finding the auction id from the submitted form 
-        auction_id = int(request.POST["auction_id"])
-        auction = Auction.objects.get(pk=auction_id)
-
-        # Add a new item to the watchlist 
-        watch_item = WatchItem(auction=auction, user=user)
-        watch_item.save()
-
-        return HttpResponseRedirect(reverse("index"))
-    
     return render(request, "auctions/index.html", {
         "auctions": Auction.objects.all()
     })
@@ -55,11 +45,9 @@ def login_view(request):
     else:
         return render(request, "auctions/login.html")
 
-
 def logout_view(request):
     logout(request)
     return HttpResponseRedirect(reverse("index"))
-
 
 def register(request):
     if request.method == "POST":
@@ -87,11 +75,11 @@ def register(request):
     else:
         return render(request, "auctions/register.html")
 
-def create(request):
+def create(request, user_id):
     if request.method == 'POST':
 
         # Create a form and populate it with the data from the request
-        form = NewListingForm(request.POST)
+        form = ListingForm(request.POST)
 
         # Check if form data is valid (server-side)
         if form.is_valid():
@@ -101,68 +89,191 @@ def create(request):
             description = form.cleaned_data["description"]
             price = form.cleaned_data["price"]
             url = form.cleaned_data["url"]
-            user = User.objects.get(pk=request.POST["user_id"])
+            user = User.objects.get(pk=user_id)
+            category = form.cleaned_data["category"]
+            #active = form.cleaned_data["active"]
 
             # Create a new auction
-            auction = Auction(title=title, description=description, price=price, url=url, user=user)
-            auction.save()
+            new_auction = Auction(title=title, description=description, price=price, url=url, user=user, category=category)
+            new_auction.save()
 
         else:
             # If the form is invalid, re-render the page with existing information.
             return render(request, "auctions/create.html", {
-                "form": NewListingForm()
+                "form": ListingForm()
             })
 
     return render(request, "auctions/create.html", {
-        "form": NewListingForm()
+        "form": ListingForm()
     })
 
-def auction(request, auction_id):
+def listing(request, auction_id):
+
     auction = Auction.objects.get(pk=auction_id)
+    comments = Comment.objects.filter(auction=auction)
 
-    if request.method == "POST":
+    # Check if the auction is active 
+    if auction.active:
 
-        # Get the bid from the submitted form data
-        bid = int(request.POST["bid"])
+        if request.method == "POST":
 
-        # Get the user's id from the submitted form data, then get the user
-        user_id = int(request.POST["user_id"])
-        user = User.objects.get(pk=user_id)
+            # Get the user's id from the submitted form data, then get the user
+            user_id = int(request.POST["user_id"])
+            user = User.objects.get(pk=user_id)
 
-        # Get the auction 
-        auction = Auction.objects.get(pk=auction_id)
+            # Get the auction 
+            auction = Auction.objects.get(pk=auction_id)
 
-        if bid >= auction.price: 
-
-            # Check if any bid of an auction has been placed 
-            if Bid.objects.filter(auction=auction_id).exists():
-    
-                last_bid = Bid.objects.filter(auction=auction_id)
-
-                if bid > last_bid[0].bid:
-                    Bid.objects.filter(auction=auction_id).update(bid=bid)
-                    return HttpResponseRedirect(reverse("index"))
+            # Check if 'watchlist ' submit  
+            if 'watchlist' in request.POST:
+                # Add a new item to the watchlist 
+                watch_item = WatchItem(auction=auction, user=user)
+                watch_item.save()
             
+            # Check if 'comment' submit
+            elif 'add_comment' in request.POST:
+
+                # Take in the data the user submitted and save it as form
+                form = CommentForm(request.POST)
+
+                # Check if form data is valid (server-side)
+                if form.is_valid():
+
+                    # Isolate the comment from the 'cleaned' version of form data
+                    new_comment = form.cleaned_data["comment"]
+
+                    # Add and save the new comment to the Comment database
+                    Comment(auction=auction, user=user, comment=new_comment).save()
+                
                 else:
+                    # If the form is invalid, re-render the page  
                     return render(request, "auctions/auction.html", {
-                    "auction": auction,
-                    "message": "Error, the bid is not sufficient."
+                        "auction": auction,
+                        "form": BidForm(),
+                        "comments": comments,
+                        "form_comment": CommentForm(),
+                    })
+            
+            # Check if 'place_bid' submit
+            elif 'place_bid' in request.POST:
+
+                # Take in the data the user submitted and save it as form
+                form = BidForm(request.POST)
+
+                # Check if form data is valid (server-side)
+                if form.is_valid():
+
+                    # Isolate the bid from the 'cleaned' version of form data
+                    bid = form.cleaned_data["bid"]
+
+                    # Check if the bid is at least as large as the starting price
+                    if bid >= auction.price: 
+
+                        # Check if any bid of an auction has been placed 
+                        if Bid.objects.filter(auction=auction_id).exists():
+                            
+                            bids = Bid.objects.filter(auction=auction_id)
+                            count = bids.count() # the number of bids
+
+                            # Check if the bid is greater than the last bid
+                            if bid > bids[count-1].bid:
+                                # Save the bid 
+                                Bid(auction=auction, user=user, bid=bid).save()
+                                count +=1
+
+                                return render(request, "auctions/auction.html", {
+                                    "auction": auction,
+                                    "form": BidForm(), 
+                                    "count": count,
+                                    "comments": comments,
+                                    "form_comment": CommentForm(),
+                                })
+                                                
+                            else:
+                                # If the bid is less than the last bid, re-render the page
+                                return render(request, "auctions/auction.html", {
+                                    "auction": auction,
+                                    "form": BidForm(), 
+                                    "message": "Error, the bid is not sufficient.",
+                                    "comments": comments,
+                                    "form_comment": CommentForm(),
+                                })
+                        else:
+                            # If any bid has not been placed, create and save the new bid
+                            new_bid = Bid(auction=auction, user=user, bid=bid)
+                            new_bid.save()
+                            count = 1
+                            return render(request, "auctions/auction.html", {
+                                    "auction": auction,
+                                    "form": BidForm(), 
+                                    "count": count,
+                                    "comments": comments,
+                                    "form_comment": CommentForm(),
+                            })
+                                        
+                    else:
+                        # Case when the bid is less than the starting price 
+                        return render(request, "auctions/auction.html", {
+                            "auction": auction,
+                            "form": BidForm(),
+                            "message": "Error, the bid must be at least as large as the starting price and greater than the last bid.",
+                            "comments": comments,
+                            "form_comment": CommentForm(),
+                        })
+                    
+                else:
+                    # If the form is invalid, re-render the page  
+                    return render(request, "auctions/auction.html", {
+                        "auction": auction,
+                        "form": form,
+                        "comments": comments,
+                        "form_comment": CommentForm(),
+                    })
+            
+            # Check if 'close' submit
+            elif 'close' in request.POST:
+                Auction.objects.filter(pk=auction_id).update(active=False)
+                return render(request, "auctions/close_page.html", {
+                    "message": "This auction is no longer active.",
                 })
 
-            # Creating and saving a new bid
-            new_bid = Bid(auction=auction, user=user, bid=bid)
-            new_bid.save()
-            return HttpResponseRedirect(reverse("index"))
+        return render(request, "auctions/auction.html", {
+            "auction": auction,
+            "form": BidForm(),
+            "comments": comments,
+            "form_comment": CommentForm(),
+        })
         
-        else:
-            return render(request, "auctions/auction.html", {
-                "auction": auction,
-                "message": "Error, the bid must be at least as large as the starting bid."
-            })
+    # If the auction is not active, then show the closing page
+    else:
 
-    return render(request, "auctions/auction.html", {
-        "auction": auction
-    })
+        # Collect the number of bids 
+        bids = Bid.objects.filter(auction=auction)
+
+        # Check if bid(s) exist
+        if bids.count() != 0:
+            max_entry = bids.latest('bid') # finds the latest (max. value) entry.
+
+            # Check if the visitor is the one who has the highest bid
+            if request.user == max_entry.user:
+
+                # Show the closing page which says that the visitor has won the auction listing
+                return render(request, "auctions/close_page.html", {
+                    "message": "This auction is no longer active.",
+                    "winner": max_entry.user,
+                })
+            else:
+
+                # If the visitor is not the one who has the highest bid, then show the closing page with the given message
+                return render(request, "auctions/close_page.html", {
+                    "message": "This auction is no longer active.",
+                })
+        else:
+            
+            # If no bid, show the closing page with given message
+            return render(request, "auctions/close_page.html", {
+                "message": "This auction is no longer active.",
+            })
 
 def watchlist(request, user_id):
     watch_list = WatchItem.objects.filter(user=user_id)
@@ -181,3 +292,14 @@ def watchlist(request, user_id):
         "list": watch_list
     })
 
+def categories(request):
+    categories = CategoryItem.objects.all()
+    return render(request, "auctions/categories.html", {
+        "categories": categories, 
+    })
+
+def category(request, field_id):
+    auctions = Auction.objects.filter(category=field_id)
+    return render(request, "auctions/category.html", {
+        "auctions": auctions, 
+    })

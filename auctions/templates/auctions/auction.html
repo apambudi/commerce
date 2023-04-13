@@ -3,17 +3,53 @@
 {% block body %}
 
 {% if message %}
-<h3>{{ message }}</h3>
+<a>{{ message }}</a>
 {% endif %}
 
-<h5>{{ auction.title }}</h5><br>
+<h5>Listing: {{ auction.title }}</h5><br>
 <a> <strong>Price:</strong> ${{ auction.price }} dollars </a><br>
+<a>{{ auction.description }}</a><br>
 <a> Listed by {{ auction.user }}</a>
-<form action="{% url 'auction' auction.id %}", method="post">
-    {% csrf_token %}
-    <input type="number", name="bid", autofocus>
-    <input type="hidden", name="user_id", value="{{ user.id }}">
-    <input type="submit", value="Place bid">
-</form>
+
+{% if user.is_authenticated %}
+    <form action="{% url 'listing' auction.id %}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="user_id" value="{{ user.id }}">
+        <input type="submit" name="watchlist" value="Add to Watchlist"><br>
+    </form><br>
+
+    {% if count %}
+    <a>{{ count }} bid(s) so far. Your bid is the current bid.</a>
+    {% endif %}
+
+    <form action="{% url 'listing' auction.id %}" method="post">
+        {% csrf_token %}
+        {{ form }}
+        <input type="hidden" name="user_id" value="{{ user.id }}">
+        <input type="submit" name="place_bid" value="Place bid"><br>
+    </form>
+
+    {% if user == auction.user %}
+        <form action="{% url 'listing' auction.id %}" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="user_id" value="{{ user.id }}">
+            <input type="submit" name="close" value="Close auction">
+        </form>
+    {% endif %}
+
+    <form action="{% url 'listing' auction.id %}" method="post">
+        {% csrf_token %}
+        {{ form_comment }}
+        <input type="hidden" name="user_id" value="{{ user.id }}">
+        <input type="submit" name="add_comment" value="Add comment"><br>
+    </form>
+{% endif %}
+
+<h3>Comments:</h3>
+{% for comment in comments %}
+    <a>{{ comment.comment }}</a><br>
+{% empty %}
+    <a>No comments.</a>
+{% endfor %}
 
 {% endblock %}
